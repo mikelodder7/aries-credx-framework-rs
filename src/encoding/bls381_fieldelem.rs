@@ -19,7 +19,7 @@ impl AttributeEncoder for FieldElement {
         if bytes.len() < amcl_wrapper::constants::FieldElement_SIZE {
             data = vec![0u8; amcl_wrapper::constants::FieldElement_SIZE - bytes.len()];
             data.extend_from_slice(&bytes); 
-        } else  if bytes.len() > amcl_wrapper::constants::FieldElement_SIZE {
+        } else if bytes.len() > amcl_wrapper::constants::FieldElement_SIZE {
             data = vec![0u8; amcl_wrapper::constants::FieldElement_SIZE];
             data.copy_from_slice(&bytes[..amcl_wrapper::constants::FieldElement_SIZE]);
         } else {
@@ -68,25 +68,25 @@ mod tests {
         let res1 = FieldElement::encode_from_f64(std::f64::MAX);
         assert!(res1.is_ok());
         let res2 = res1.unwrap();
-        assert_eq!((&res2 - &res2), FieldElement::zero());
+        assert_eq!((&res2 - &res2), FieldElement::new());
 
         let res3 = FieldElement::encode_from_f64(std::f64::MIN);
         assert!(res3.is_ok());
-        assert_eq!(FieldElement::zero_center(), res3.unwrap() + res2);
+        assert_eq!(FieldElement::zero_center(), &res3.unwrap() + &res2);
 
         let res1 = FieldElement::encode_from_f64(std::f64::NEG_INFINITY);
         assert!(res1.is_ok());
         assert_eq!(FieldElement::from(8), res1.unwrap());
 
-        let co: amcl_wrapper::types::BigNum = *amcl_wrapper::constants::CurveOrder;
-        let pos_inf = FieldElement::from(co) - FieldElement::from(9);
+        let pos_inf = <FieldElement as AttributeEncoder>::max() - FieldElement::from(9u64);
         let res1 = FieldElement::encode_from_f64(std::f64::INFINITY);
         assert!(res1.is_ok());
         assert_eq!(pos_inf, res1.unwrap());
 
         let res1 = FieldElement::encode_from_f64(std::f64::NAN);
         assert!(res1.is_ok());
-        assert_eq!(FieldElement::one(), res1.unwrap());
+        let res2 = <FieldElement as AttributeEncoder>::max() - FieldElement::from(8u64);
+        assert_eq!(res2, res1.unwrap());
     }
 
     #[test]
@@ -95,8 +95,8 @@ mod tests {
         test_vectors.push("test_vectors");
         test_vectors.push("integers.txt");
         let lines = std::fs::read_to_string(test_vectors).unwrap().split("\n").map(|s| s.to_string()).collect::<Vec<String>>();
-        assert_eq!(lines.len(), 6);
-        for i in 0..lines.len() - 1 {
+        assert_eq!(lines.len(), 7);
+        for i in 0..lines.len() - 2 {
             let parts = lines[i].split(",").collect::<Vec<&str>>();
             let value = parts[0].parse::<isize>().unwrap();
             let expected = FieldElement::from_hex(parts[1].to_string()).unwrap();
@@ -104,11 +104,15 @@ mod tests {
             assert!(res.is_ok());
             assert_eq!(expected, res.unwrap());
         }
-        let parts = lines[lines.len() - 1].split(",").collect::<Vec<&str>>();
+        let parts = lines[lines.len() - 2].split(",").collect::<Vec<&str>>();
         let value = parts[0].parse::<usize>().unwrap();
         let expected = FieldElement::from_hex(parts[1].to_string()).unwrap();
         let res = FieldElement::encode_from_usize(value);
         assert!(res.is_ok());
         assert_eq!(expected, res.unwrap());
+
+        let parts = lines[lines.len() - 1].split(",").collect::<Vec<&str>>();
+        assert_eq!(parts[0], "null");
+        assert_eq!(FieldElement::from_hex(parts[1].to_string()).unwrap(), FieldElement::encoded_null().unwrap());
     }
 }

@@ -4,7 +4,7 @@ use openssl::{
     bn::{BigNum, BigNumRef}
 };
 
-use std::{cmp::{Eq, PartialEq}, ops::{Add, Sub}};
+use std::{cmp::{Eq, PartialEq}, ops::{Add, Sub, Neg}};
 
 /// A simple wrapper class for converting attributes to cryptographic integers
 /// represented in OpenSSL's BigNum library
@@ -34,6 +34,16 @@ impl<'a, 'b> Add<&'b BigNumber> for &'a BigNumber {
     fn add(self, rhs: &'b BigNumber) -> BigNumber {
         let mut bn = BigNum::new().unwrap();
         BigNumRef::checked_add(&mut bn, &self.0, &rhs.0).unwrap();
+        BigNumber(bn)
+    }
+}
+
+impl Neg for BigNumber {
+    type Output = BigNumber;
+
+    fn neg(self) -> Self::Output {
+        let mut bn = BigNum::from_slice(&self.0.to_vec()).unwrap();
+        bn.set_negative(if self.0.is_negative() { false } else { true });
         BigNumber(bn)
     }
 }
@@ -145,8 +155,9 @@ mod tests {
         assert_eq!(pos_inf, res1.unwrap());
 
         let res1 = BigNumber::encode_from_f64(std::f64::NAN);
+        let nan = BigNumber::max() - BigNumber::from(8u64);
         assert!(res1.is_ok());
-        assert_eq!(BigNum::from_u32(1).unwrap(), res1.unwrap().0);
+        assert_eq!(nan.0, res1.unwrap().0);
     }
 
     #[test]
@@ -155,7 +166,7 @@ mod tests {
         test_vectors.push("test_vectors");
         test_vectors.push("integers.txt");
         let lines = std::fs::read_to_string(test_vectors).unwrap().split("\n").map(|s| s.to_string()).collect::<Vec<String>>();
-        assert_eq!(lines.len(), 6);
+        assert_eq!(lines.len(), 7);
         for i in 0..lines.len() - 1 {
             let parts = lines[i].split(",").collect::<Vec<&str>>();
             let value = parts[0].parse::<isize>().unwrap();
@@ -170,5 +181,9 @@ mod tests {
         let res = BigNumber::encode_from_usize(value);
         assert!(res.is_ok());
         assert_eq!(expected, res.unwrap());
+
+        let parts = lines[lines.len() - 1].split(",").collect::<Vec<&str>>();
+        assert_eq!(parts[0], "null");
+        assert_eq!(BigNumber::from_hex(parts[1]).unwrap(), BigNumber::encoded_null().unwrap());
     }
 }

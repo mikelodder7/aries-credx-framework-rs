@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use digest::{Digest, generic_array::typenum::U32};
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, Neg};
 
 /// How many bits are used to shift 1 to get to zero centering
 const BITS_IN_ZERO: usize = 254;
@@ -9,7 +9,7 @@ const BITS_IN_ZERO: usize = 254;
 /// Cryptographic integers are limited to 256 bits
 pub trait AttributeEncoder {
     /// The type to represent the cryptographic integer
-    type Output: Add<Output = Self::Output> + Sub<Output = Self::Output> + From<u64>;
+    type Output: Add<Output = Self::Output> + Sub<Output = Self::Output> + Neg<Output = Self::Output> + From<u64>;
 
     /// Return the highest value for `Output`
     fn max() -> Self::Output;
@@ -17,6 +17,14 @@ pub trait AttributeEncoder {
     fn zero_center() -> Self::Output;
     /// Takes a vector of bytes and returns `Self::Output`
     fn from_vec(v: Vec<u8>) -> Self::Output;
+
+    /// Encoded value to represent NULL values.
+    /// Should indicate a value was not available
+    fn encoded_null() -> Result<Self::Output, String> {
+        let mut null = vec![0u8; 32];
+        null[31] = 7;
+        Ok(Self::from_vec(null))
+    }
 
     /// Takes an date string that is formatted according to RFC3339
     /// and converts it to a cryptographic integer. 
@@ -57,8 +65,7 @@ pub trait AttributeEncoder {
 
         Ok(
             match value.classify() {
-                Nan => Self::Output::from(1),
-                Subnormal => Self::Output::from(2),
+                Nan | Subnormal => { Self::max() - Self::Output::from(8) }
                 Zero => Self::zero_center(),
                 Infinite => {
                     if value.is_sign_positive() {
@@ -73,12 +80,19 @@ pub trait AttributeEncoder {
                     for _ in 0..BITS_IN_ZERO {
                         b = b.double();
                     }
+                    let (_, mut d) = b.clone().into_bigint_and_exponent();
+                    // 15 decimal places means no decimals at all
+                    // Anything higher should be shifted
+                    while d > 15 {
+                        b = b.half();
+                        d -= 1;
+                    }
                     let (bi, _) = b.into_bigint_and_exponent();
                     let (sign, bytes) = bi.to_bytes_be();
                     match sign {
                         NoSign => Self::zero_center(),
                         Plus => Self::from_vec(bytes),
-                        Minus => Self::zero_center() - Self::from_vec(bytes)
+                        Minus => -Self::from_vec(bytes) + Self::zero_center()
                     }
                 }
             }
